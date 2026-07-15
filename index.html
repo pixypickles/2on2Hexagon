@@ -66,7 +66,7 @@
       </header>
       <div id="gaugeRow">
         <div class="gauge"><i id="gauge1"></i></div>
-        <div><div id="statusText">KICK OFF</div><div id="sixSecond"></div></div>
+        <div id="statusText">KICK OFF</div>
         <div class="gauge reverse"><i id="gauge2"></i></div>
       </div>
       <div id="canvasWrap">
@@ -74,22 +74,22 @@
         <div id="slowFlash"></div>
       </div>
       <div id="controls">
-        <div id="dpad" class="dpad" aria-label="direction pad">
-          <button data-dir="up-left">↖</button>
-          <button data-dir="up">▲</button>
-          <button data-dir="up-right">↗</button>
-          <button data-dir="left">◀</button>
-          <button class="dpad-center" disabled>●</button>
-          <button data-dir="right">▶</button>
-          <button data-dir="down-left">↙</button>
-          <button data-dir="down">▼</button>
-          <button data-dir="down-right">↘</button>
+        <div id="dpad" class="dpad" aria-label="8方向パッド">
+          <button data-diag="up,left" aria-label="左上">↖</button>
+          <button data-dir="up" aria-label="上">▲</button>
+          <button data-diag="up,right" aria-label="右上">↗</button>
+          <button data-dir="left" aria-label="左">◀</button>
+          <span class="dpad-center"></span>
+          <button data-dir="right" aria-label="右">▶</button>
+          <button data-diag="down,left" aria-label="左下">↙</button>
+          <button data-dir="down" aria-label="下">▼</button>
+          <button data-diag="down,right" aria-label="右下">↘</button>
         </div>
         <div id="actionButtons" class="actions">
-          <button data-act="A">A<br>ゴロパス</button>
-          <button data-act="B">B<br>浮き玉パス</button>
-          <button data-act="C">C<br>直線シュート</button>
-          <button data-act="D">D<br>回転シュート</button>
+          <button data-act="A"><strong>A</strong><small>ゴロパス</small></button>
+          <button data-act="B"><strong>B</strong><small>浮きパス</small></button>
+          <button data-act="C"><strong>C</strong><small>直線シュート</small></button>
+          <button data-act="D"><strong>D</strong><small>回転シュート</small></button>
         </div>
       </div>
       <button id="quitBtn" class="ghost">タイトルへ戻る</button>
