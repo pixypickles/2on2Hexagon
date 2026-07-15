@@ -52,7 +52,7 @@
       <button id="startBtn" class="primary">試合開始</button>
       <details>
         <summary>操作</summary>
-        <p>左の8方向パッドで移動。攻撃時は A＝ゴロパス、B＝浮き玉パス、C＝ストレート、D＝カーブ。C/Dは長押しで高速チャージ、同じシュートボタンを素早く2回でハーフチャージ。必殺ゲージ満タン時はCとDを同時押し。</p>
+        <p>左の方向パッドで移動。攻撃時は A＝ゴロパス、B＝浮き玉パス、C＝ストレート、D＝カーブ。C/Dは長押しでチャージ。必殺ゲージ満タン時はCとDを同時押し。</p>
         <p>守備時は A＝操作交代、B＝撃ち返し、C＝パンチングジャンプ、D＝キャッチジャンプ。ボール接触直前のC/D入力でジャストキャッチ。</p>
         <p>キーボード：1PはWASD＋J/K/L/;、2Pは矢印＋1/2/3/0。</p>
       </details>
@@ -75,21 +75,16 @@
       </div>
       <div id="controls">
         <div id="dpad" class="dpad" aria-label="direction pad">
-          <button data-dir="up-left">↖</button>
           <button data-dir="up">▲</button>
-          <button data-dir="up-right">↗</button>
           <button data-dir="left">◀</button>
-          <button class="dpad-center" disabled>●</button>
           <button data-dir="right">▶</button>
-          <button data-dir="down-left">↙</button>
           <button data-dir="down">▼</button>
-          <button data-dir="down-right">↘</button>
         </div>
         <div id="actionButtons" class="actions">
-          <button data-act="A"><span class="act-key">A</span><span class="act-name">ゴロパス</span></button>
-          <button data-act="B"><span class="act-key">B</span><span class="act-name">浮き玉パス</span></button>
-          <button data-act="C"><span class="act-key">C</span><span class="act-name">ストレート</span></button>
-          <button data-act="D"><span class="act-key">D</span><span class="act-name">回転シュート</span></button>
+          <button data-act="A">A</button>
+          <button data-act="B">B</button>
+          <button data-act="C">C</button>
+          <button data-act="D">D</button>
         </div>
       </div>
       <button id="quitBtn" class="ghost">タイトルへ戻る</button>
