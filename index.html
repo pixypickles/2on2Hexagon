@@ -66,7 +66,7 @@
       </header>
       <div id="gaugeRow">
         <div class="gauge"><i id="gauge1"></i></div>
-        <div id="statusText">KICK OFF</div>
+        <div><div id="statusText">KICK OFF</div><div id="sixSecond"></div></div>
         <div class="gauge reverse"><i id="gauge2"></i></div>
       </div>
       <div id="canvasWrap">
@@ -75,16 +75,21 @@
       </div>
       <div id="controls">
         <div id="dpad" class="dpad" aria-label="direction pad">
+          <button data-dir="up-left">↖</button>
           <button data-dir="up">▲</button>
+          <button data-dir="up-right">↗</button>
           <button data-dir="left">◀</button>
+          <button class="dpad-center" disabled>●</button>
           <button data-dir="right">▶</button>
+          <button data-dir="down-left">↙</button>
           <button data-dir="down">▼</button>
+          <button data-dir="down-right">↘</button>
         </div>
         <div id="actionButtons" class="actions">
-          <button data-act="A">A</button>
-          <button data-act="B">B</button>
-          <button data-act="C">C</button>
-          <button data-act="D">D</button>
+          <button data-act="A">A<br>ゴロパス</button>
+          <button data-act="B">B<br>浮き玉パス</button>
+          <button data-act="C">C<br>直線シュート</button>
+          <button data-act="D">D<br>回転シュート</button>
         </div>
       </div>
       <button id="quitBtn" class="ghost">タイトルへ戻る</button>
