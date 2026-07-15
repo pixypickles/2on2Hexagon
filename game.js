@@ -225,10 +225,23 @@ function updateBall(dt){
   b.trail.push({x:b.x,y:b.y,z:b.z});if(b.trail.length>12)b.trail.shift();
   wallAndGoal(b);
 }
+function dampAfterWall(b){
+  // 壁に当たるたびに勢いと回転を失い、ピンボール状態を防ぐ。
+  const damping=b.type==='special'&&b.specialT<.9?.88:b.type==='charged'||b.type==='knuckle'?.82:.76;
+  b.vx*=damping;b.vy*=damping;b.curve*=.78;
+}
 function wallAndGoal(b){
-  if(b.y-b.r<COURT.top){if(inGoalMouth(b.x)){score(0);return;}b.y=COURT.top+b.r;b.vy=Math.abs(b.vy);}
-  if(b.y+b.r>COURT.bottom){if(inGoalMouth(b.x)){score(1);return;}b.y=COURT.bottom-b.r;b.vy=-Math.abs(b.vy);}
-  const hb=hexBoundsAtY(b.y);if(b.x-b.r<hb.min){b.x=hb.min+b.r;b.vx=Math.abs(b.vx)*.98;}if(b.x+b.r>hb.max){b.x=hb.max-b.r;b.vx=-Math.abs(b.vx)*.98;}
+  if(b.y-b.r<COURT.top){
+    if(inGoalMouth(b.x)){score(0);return;}
+    b.y=COURT.top+b.r;b.vy=Math.abs(b.vy);dampAfterWall(b);
+  }
+  if(b.y+b.r>COURT.bottom){
+    if(inGoalMouth(b.x)){score(1);return;}
+    b.y=COURT.bottom-b.r;b.vy=-Math.abs(b.vy);dampAfterWall(b);
+  }
+  const hb=hexBoundsAtY(b.y);
+  if(b.x-b.r<hb.min){b.x=hb.min+b.r;b.vx=Math.abs(b.vx);dampAfterWall(b);}
+  if(b.x+b.r>hb.max){b.x=hb.max-b.r;b.vx=-Math.abs(b.vx);dampAfterWall(b);}
 }
 function score(team){state.score[team]++;state.gauge[team]=clamp(state.gauge[team]+12,0,100);resetKickoff(1-team);updateHUD();}
 
@@ -242,17 +255,21 @@ function collisions(){
       const just=p.justWindow>0||actionHeld(team,'C')||actionHeld(team,'D');
       if(just){catchBall(p,true);return;}
       if(p.action==='catch'&&b.type!=='knuckle'&&b.type!=='special'){catchBall(p,false);return;}
-      if(b.special==='break'){p.stun=.75;reflectFromPlayer(p,1.05);return;}
-      if(p.action==='punch'||p.action==='catch'){reflectFromPlayer(p,1.2);state.gauge[team]=clamp(state.gauge[team]+8,0,100);return;}
+      if(b.special==='break'){p.stun=.75;reflectFromPlayer(p,.82);return;}
+      if(p.action==='punch'||p.action==='catch'){reflectFromPlayer(p,.82);state.gauge[team]=clamp(state.gauge[team]+8,0,100);return;}
     }
     if(p.action==='return'&&incoming){const n=norm(CX-p.x,team===0?COURT.top-p.y:COURT.bottom-p.y);b.vx=n.x*760;b.vy=n.y*760;b.lastTeam=team;b.type='charged';state.gauge[team]=clamp(state.gauge[team]+12,0,100);return;}
-    if(b.special==='break'&&incoming){p.stun=.75;reflectFromPlayer(p,1.05);return;}
-    if(b.type==='charged'||b.type==='knuckle'||b.type==='special'){reflectFromPlayer(p,1.0);return;}
+    if(b.special==='break'&&incoming){p.stun=.75;reflectFromPlayer(p,.82);return;}
+    // 十分に減速したボールは、シュート種別に関係なく足元で止める。
+    // ブレイクショットだけは固有効果中なので例外。
+    const speed=len(b.vx,b.vy);
+    if(b.z<24&&speed<390){givePossession(team,p);return;}
+    if(b.type==='charged'||b.type==='knuckle'||b.type==='special'){reflectFromPlayer(p,.68);return;}
     // Normal ball trap / possession.
     if(b.z<24){givePossession(team,p);return;}
   }
 }
-function reflectFromPlayer(p,mul){const b=state.ball,n=norm(b.x-p.x,b.y-p.y),sp=Math.max(430,len(b.vx,b.vy)*mul);b.x=p.x+n.x*(p.r+b.r+2);b.y=p.y+n.y*(p.r+b.r+2);b.vx=n.x*sp;b.vy=n.y*sp;}
+function reflectFromPlayer(p,mul=.68){const b=state.ball,n=norm(b.x-p.x,b.y-p.y),sp=Math.max(120,len(b.vx,b.vy)*mul);b.x=p.x+n.x*(p.r+b.r+4);b.y=p.y+n.y*(p.r+b.r+4);b.vx=n.x*sp;b.vy=n.y*sp;b.curve*=.72;b.ignorePlayer=p;b.ignoreT=.16;}
 function catchBall(p,just){givePossession(p.team,p);state.gauge[p.team]=clamp(state.gauge[p.team]+(just?18:9),0,100);if(just){state.freeze=.2;$('#slowFlash').classList.remove('flash');void $('#slowFlash').offsetWidth;$('#slowFlash').classList.add('flash');$('#statusText').textContent='JUST CATCH!';state.statusT=.75;}}
 
 function draw(){ctx.clearRect(0,0,W,H);drawCourt();drawBallTrail();for(const team of [1,0])for(let i=0;i<2;i++)drawPlayer(state.players[team][i],state.active[team]===i);drawBall();drawCharge();}
@@ -274,7 +291,18 @@ function drawBallTrail(){const b=state.ball;for(let i=0;i<b.trail.length;i++){co
 function drawBall(){const b=state.ball;if(b.special==='stealth'&&!b.visible){ctx.save();ctx.globalAlpha=.55;ctx.fillStyle='#07131f';ctx.beginPath();ctx.ellipse(b.x,b.y+10,18,7,0,0,Math.PI*2);ctx.fill();ctx.restore();return;}ctx.save();ctx.translate(b.x,b.y-b.z*.28);ctx.shadowBlur=b.type==='special'?26:10;ctx.shadowColor=b.type==='special'?'#fff06a':'#9ff';ctx.fillStyle='#f7fbff';ctx.beginPath();ctx.arc(0,0,b.r,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#12202b';ctx.lineWidth=3;ctx.stroke();ctx.fillStyle='#12202b';ctx.beginPath();ctx.arc(0,0,5,0,Math.PI*2);ctx.fill();ctx.restore();if(b.z>0){ctx.fillStyle='#0006';ctx.beginPath();ctx.ellipse(b.x,b.y+9,16,6,0,0,Math.PI*2);ctx.fill();}}
 function drawCharge(){for(let team=0;team<2;team++)for(const p of state.players[team])if(p.charging){ctx.fillStyle='#000b';ctx.fillRect(p.x-35,p.y-48,70,8);ctx.fillStyle='#ffe462';ctx.fillRect(p.x-35,p.y-48,70*p.charge,8);}}
 
-function updateHUD(){if(!state)return;$('#score1').textContent=state.score[0];$('#score2').textContent=state.score[1];const s=Math.ceil(state.time),m=Math.floor(s/60),ss=s%60;$('#timer').textContent=`${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;$('#gauge1').style.width=state.gauge[0]+'%';$('#gauge2').style.width=state.gauge[1]+'%';if(state.statusT<=0&&state.attackTeam>=0)$('#statusText').textContent=`攻撃 ${Math.max(0,state.advanceTime).toFixed(1)}秒`;}
+function updateActionLabels(){
+  const attack=!!(state&&state.ball.owner&&state.ball.owner.team===0);
+  const labels=attack
+    ?{A:['A','ゴロパス'],B:['B','浮き玉パス'],C:['C','ストレート'],D:['D','回転シュート']}
+    :{A:['A','操作交代'],B:['B','撃ち返し'],C:['C','パンチ'],D:['D','キャッチ']};
+  document.querySelectorAll('[data-act]').forEach(btn=>{
+    const [key,name]=labels[btn.dataset.act];
+    const keyEl=btn.querySelector('.act-key'),nameEl=btn.querySelector('.act-name');
+    if(keyEl)keyEl.textContent=key;if(nameEl)nameEl.textContent=name;
+  });
+}
+function updateHUD(){if(!state)return;updateActionLabels();$('#score1').textContent=state.score[0];$('#score2').textContent=state.score[1];const s=Math.ceil(state.time),m=Math.floor(s/60),ss=s%60;$('#timer').textContent=`${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;$('#gauge1').style.width=state.gauge[0]+'%';$('#gauge2').style.width=state.gauge[1]+'%';if(state.statusT<=0&&state.attackTeam>=0)$('#statusText').textContent=`攻撃 ${Math.max(0,state.advanceTime).toFixed(1)}秒`;}
 function loop(now){if(!state||!state.running)return;const dt=Math.min(.033,(now-last)/1000);last=now;update(dt);draw();raf=requestAnimationFrame(loop);}
 function finish(){state.running=false;cancelAnimationFrame(raf);gameScreen.classList.add('hidden');result.classList.remove('hidden');const [a,b]=state.score;$('#resultTitle').textContent=a>b?'YOU WIN!':a<b?'YOU LOSE':'DRAW';$('#resultScore').textContent=`${state.teams[0].name} ${a} - ${b} ${state.teams[1].name}`;}
 
