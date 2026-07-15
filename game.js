@@ -40,7 +40,7 @@ class Player{
 }
 class Ball{
   constructor(){this.reset();}
-  reset(){this.x=CX;this.y=CY;this.vx=0;this.vy=0;this.r=13;this.z=0;this.vz=0;this.owner=null;this.lastTeam=-1;this.type='normal';this.curve=0;this.charge=0;this.special='';this.specialT=0;this.visible=true;this.trail=[];}
+  reset(){this.x=CX;this.y=CY;this.vx=0;this.vy=0;this.r=13;this.z=0;this.vz=0;this.owner=null;this.lastTeam=-1;this.type='normal';this.curve=0;this.charge=0;this.special='';this.specialT=0;this.visible=true;this.trail=[];this.ignorePlayer=null;this.ignoreT=0;}
 }
 
 function newGame(){
@@ -49,12 +49,13 @@ function newGame(){
   state={
     mode:$('#modeSelect').value,difficulty:$('#difficultySelect').value,total:+$('#timeSelect').value,time:+$('#timeSelect').value,
     running:true,score:[0,0],gauge:[0,0],teams:[t1,t2],special:[$('#specialSelect').value,['hook','curve','break','stealth'][Math.floor(Math.random()*4)]],
-    active:[1,1],players:[[],[]],ball:new Ball(),freeze:0,statusT:1.2,goalPause:0,keyboard2:false
+    active:[1,1],players:[[],[]],ball:new Ball(),freeze:0,statusT:1.2,goalPause:0,keyboard2:false,attackTeam:-1,advanceTime:6
   };
   state.players[0]=[new Player(0,'GK',CX,H-118),new Player(0,'FP',CX,H-285)];
   state.players[1]=[new Player(1,'GK',CX,118),new Player(1,'FP',CX,285)];
   $('#p1Name').textContent=t1.name;$('#p2Name').textContent=t2.name;
   menu.classList.add('hidden');result.classList.add('hidden');gameScreen.classList.remove('hidden');
+  givePossession(0, state.players[0][1], 'KICK OFF');
   updateHUD();last=performance.now();raf=requestAnimationFrame(loop);
 }
 
@@ -64,6 +65,29 @@ function resetKickoff(scoredOn=-1){
   state.players[1][0].x=CX;state.players[1][0].y=118;state.players[1][1].x=CX;state.players[1][1].y=285;
   state.active=[1,1];state.goalPause=.9;state.statusT=.9;
   $('#statusText').textContent=scoredOn<0?'KICK OFF':'GOAL!';
+  const receivingTeam=scoredOn<0?0:scoredOn;
+  givePossession(receivingTeam,state.players[receivingTeam][1],scoredOn<0?'KICK OFF':'GOAL!');
+}
+
+function beginAttack(team){
+  state.attackTeam=team;
+  state.advanceTime=6;
+}
+function givePossession(team,player,message=''){
+  const b=state.ball;
+  b.owner=player;b.x=player.x;b.y=player.y+(team===0?-25:25);b.vx=b.vy=0;b.z=b.vz=0;
+  b.type='normal';b.special='';b.visible=true;b.lastTeam=team;b.ignorePlayer=null;b.ignoreT=0;
+  state.active[team]=player.role==='GK'?0:1;beginAttack(team);
+  if(message){$('#statusText').textContent=message;state.statusT=Math.max(state.statusT,.75);}
+}
+function opponentHalfReached(team,b){
+  return team===0?b.y<CY:b.y>CY;
+}
+function sixSecondTurnover(){
+  const losing=state.attackTeam;if(losing<0)return;const receiving=1-losing;
+  const receiver=state.players[receiving][1];
+  givePossession(receiving,receiver,'6秒ルール：相手ボール');
+  state.statusT=1.2;
 }
 
 function inputVector(team){
@@ -101,13 +125,18 @@ function releaseAction(team,a){
 function pass(team,lob){
   const b=state.ball,from=b.owner;if(!from||from.team!==team)return;
   const mate=state.players[team][from===state.players[team][0]?1:0];
-  const n=norm(mate.x-from.x,mate.y-from.y);b.owner=null;b.x=from.x+n.x*35;b.y=from.y+n.y*35;b.vx=n.x*(lob?430:650);b.vy=n.y*(lob?430:650);b.z=lob?18:0;b.vz=lob?410:0;b.type=lob?'lob':'normal';b.lastTeam=team;state.active[team]=mate.role==='GK'?0:1;state.gauge[team]=clamp(state.gauge[team]+4,0,100);
+  const n=norm(mate.x-from.x,mate.y-from.y);
+  b.owner=null;b.x=from.x+n.x*(from.r+b.r+12);b.y=from.y+n.y*(from.r+b.r+12);
+  b.vx=n.x*(lob?470:720);b.vy=n.y*(lob?470:720);b.z=lob?20:0;b.vz=lob?410:0;
+  b.type=lob?'lob':'normal';b.lastTeam=team;b.ignorePlayer=from;b.ignoreT=.32;
+  state.active[team]=mate.role==='GK'?0:1;state.gauge[team]=clamp(state.gauge[team]+4,0,100);
+  beginAttack(team);
 }
 function shoot(team,button,charge){
-  const b=state.ball,p=b.owner;if(!p)return;const targetY=team===0?COURT.top-30:COURT.bottom+30;let dx=(CX-p.x)+(p.team===0?1:-1)*0;let dy=targetY-p.y;const mv=inputVector(team);if(Math.abs(mv.x)>0.05)dx+=mv.x*420;const n=norm(dx,dy);const power=640+charge*520;b.owner=null;b.x=p.x+n.x*36;b.y=p.y+n.y*36;b.vx=n.x*power;b.vy=n.y*power;b.z=0;b.vz=0;b.type=button==='C'?(charge>.93?'knuckle':charge>.25?'charged':'normal'):'curve';b.curve=button==='D'?(team===0?1:-1)*(Math.abs(mv.x)>.1?Math.sign(mv.x):1)*(1.1+charge*3.7):0;b.charge=charge;b.lastTeam=team;state.gauge[team]=clamp(state.gauge[team]+7+charge*5,0,100);
+  const b=state.ball,p=b.owner;if(!p)return;const targetY=team===0?COURT.top-30:COURT.bottom+30;let dx=(CX-p.x)+(p.team===0?1:-1)*0;let dy=targetY-p.y;const mv=inputVector(team);if(Math.abs(mv.x)>0.05)dx+=mv.x*420;const n=norm(dx,dy);const power=640+charge*520;b.owner=null;b.x=p.x+n.x*36;b.y=p.y+n.y*36;b.vx=n.x*power;b.vy=n.y*power;b.z=0;b.vz=0;b.type=button==='C'?(charge>.93?'knuckle':charge>.25?'charged':'normal'):'curve';b.curve=button==='D'?(team===0?1:-1)*(Math.abs(mv.x)>.1?Math.sign(mv.x):1)*(1.1+charge*3.7):0;b.charge=charge;b.lastTeam=team;b.ignorePlayer=p;b.ignoreT=.18;beginAttack(team);state.gauge[team]=clamp(state.gauge[team]+7+charge*5,0,100);
 }
 function fireSpecial(team){
-  const b=state.ball,p=b.owner;if(!p)return;const spec=state.special[team];const targetY=team===0?COURT.top-20:COURT.bottom+20;const mv=inputVector(team);let aimX=CX+(Math.abs(mv.x)>.1?Math.sign(mv.x):1)*120;const n=norm(aimX-p.x,targetY-p.y);b.owner=null;b.x=p.x+n.x*40;b.y=p.y+n.y*40;b.vx=n.x*(spec==='break'?330:780);b.vy=n.y*(spec==='break'?330:780);b.type='special';b.special=spec;b.specialT=0;b.lastTeam=team;b.curve=spec==='curve'?(Math.abs(mv.x)>.1?Math.sign(mv.x):1)*(team===0?1:-1)*4.1:0;b.visible=true;state.gauge[team]=0;state.statusT=.8;$('#statusText').textContent='SPECIAL!';
+  const b=state.ball,p=b.owner;if(!p)return;const spec=state.special[team];const targetY=team===0?COURT.top-20:COURT.bottom+20;const mv=inputVector(team);let aimX=CX+(Math.abs(mv.x)>.1?Math.sign(mv.x):1)*120;const n=norm(aimX-p.x,targetY-p.y);b.owner=null;b.x=p.x+n.x*40;b.y=p.y+n.y*40;b.vx=n.x*(spec==='break'?330:780);b.vy=n.y*(spec==='break'?330:780);b.type='special';b.special=spec;b.specialT=0;b.lastTeam=team;b.curve=spec==='curve'?(Math.abs(mv.x)>.1?Math.sign(mv.x):1)*(team===0?1:-1)*4.1:0;b.visible=true;b.ignorePlayer=p;b.ignoreT=.18;beginAttack(team);state.gauge[team]=0;state.statusT=.8;$('#statusText').textContent='SPECIAL!';
 }
 function keeperDive(team,longDive){
   const g=state.players[team][0],b=state.ball;const n=norm(b.x-g.x,b.y-g.y);g.dive=longDive?.42:.3;g.diveVX=n.x*(longDive?720:470);g.diveVY=n.y*(longDive?720:470);g.action=longDive?'punch':'catch';g.actionT=g.dive;g.justWindow=.12;
@@ -118,6 +147,11 @@ function update(dt){
   if(state.goalPause>0){state.goalPause-=dt;return;}
   state.time-=dt;if(state.time<=0){state.time=0;finish();return;}
   if(state.statusT>0){state.statusT-=dt;if(state.statusT<=0)$('#statusText').textContent='';}
+  const b=state.ball;
+  if(state.attackTeam>=0){
+    if(opponentHalfReached(state.attackTeam,b)){state.attackTeam=-1;state.advanceTime=6;}
+    else{state.advanceTime-=dt;if(state.advanceTime<=0){sixSecondTurnover();updateHUD();return;}}
+  }
   updateTeam(0,dt,true);
   if(state.mode==='2p') updateTeam(1,dt,true); else updateCPU(dt);
   updateBall(dt);collisions();updateHUD();
@@ -135,7 +169,7 @@ function updateCPU(dt){
   const diff={easy:.55,normal:.78,hard:1}[state.difficulty];const team=1,b=state.ball,ps=state.players[1],g=ps[0],f=ps[1];
   for(const p of ps){if(p.stun>0)p.stun-=dt;if(p.actionT>0)p.actionT-=dt;if(p.justWindow>0)p.justWindow-=dt;}
   const owns=b.owner&&b.owner.team===1;
-  if(owns){state.active[1]=b.owner===g?0:1;const p=b.owner;p.x+=clamp(CX-p.x,-1,1)*110*dt;constrainPlayer(p);if(Math.random()<dt*(.9+diff)){if(state.gauge[1]>=100&&Math.random()<.35)fireSpecial(1);else shoot(1,Math.random()<.45?'D':'C',Math.random()*(.5+diff*.5));}}
+  if(owns){state.active[1]=b.owner===g?0:1;const p=b.owner;p.x+=clamp(CX-p.x,-1,1)*110*dt;constrainPlayer(p);const urgency=state.attackTeam===1&&state.advanceTime<2.2;if(urgency||Math.random()<dt*(1.25+diff*1.5)){if(state.gauge[1]>=100&&Math.random()<.35)fireSpecial(1);else if(!urgency&&Math.random()<.28)pass(1,Math.random()<.35);else shoot(1,Math.random()<.45?'D':'C',Math.random()*(.5+diff*.5));}}
   else{
     g.x+=clamp(b.x-g.x,-1,1)*(120+diff*130)*dt;g.x=clamp(g.x,CX-COURT.goalW*.55,CX+COURT.goalW*.55);constrainPlayer(g);
     f.x+=clamp(b.x-f.x,-1,1)*(90+diff*120)*dt;f.y+=clamp(Math.min(320,b.y)-f.y,-1,1)*100*dt;constrainPlayer(f);
@@ -150,6 +184,7 @@ function constrainPlayer(p){
 
 function updateBall(dt){
   const b=state.ball;
+  if(b.ignoreT>0){b.ignoreT-=dt;if(b.ignoreT<=0)b.ignorePlayer=null;}
   if(b.owner){const p=b.owner;b.x=p.x;b.y=p.y+(p.team===0?-25:25);b.z=0;return;}
   b.specialT+=dt;if(b.special==='stealth'){b.visible=!(b.specialT>.12&&b.specialT<.62);}
   if(b.type==='knuckle'){const wobble=Math.sin(performance.now()*.035)+Math.sin(performance.now()*.021);b.vx+=wobble*155*dt;}
@@ -172,6 +207,7 @@ function score(team){state.score[team]++;state.gauge[team]=clamp(state.gauge[tea
 function collisions(){
   const b=state.ball;if(b.owner)return;
   for(let team=0;team<2;team++)for(const p of state.players[team]){
+    if(p===b.ignorePlayer&&b.ignoreT>0)continue;
     const d=len(b.x-p.x,b.y-p.y);if(d>p.r+b.r+10||b.z>58)continue;
     const incoming=b.lastTeam!==team;
     if(p.role==='GK'&&incoming){
@@ -185,11 +221,11 @@ function collisions(){
     if(b.special==='break'&&incoming){p.stun=.75;reflectFromPlayer(p,1.05);return;}
     if(b.type==='charged'||b.type==='knuckle'||b.type==='special'){reflectFromPlayer(p,1.0);return;}
     // Normal ball trap / possession.
-    if(b.z<24){b.owner=p;b.vx=b.vy=0;b.type='normal';b.special='';b.visible=true;state.active[team]=p.role==='GK'?0:1;return;}
+    if(b.z<24){givePossession(team,p);return;}
   }
 }
 function reflectFromPlayer(p,mul){const b=state.ball,n=norm(b.x-p.x,b.y-p.y),sp=Math.max(430,len(b.vx,b.vy)*mul);b.x=p.x+n.x*(p.r+b.r+2);b.y=p.y+n.y*(p.r+b.r+2);b.vx=n.x*sp;b.vy=n.y*sp;}
-function catchBall(p,just){const b=state.ball;b.owner=p;b.vx=b.vy=0;b.type='normal';b.special='';b.visible=true;state.active[p.team]=p.role==='GK'?0:1;state.gauge[p.team]=clamp(state.gauge[p.team]+(just?18:9),0,100);if(just){state.freeze=.2;$('#slowFlash').classList.remove('flash');void $('#slowFlash').offsetWidth;$('#slowFlash').classList.add('flash');$('#statusText').textContent='JUST CATCH!';state.statusT=.75;}}
+function catchBall(p,just){givePossession(p.team,p);state.gauge[p.team]=clamp(state.gauge[p.team]+(just?18:9),0,100);if(just){state.freeze=.2;$('#slowFlash').classList.remove('flash');void $('#slowFlash').offsetWidth;$('#slowFlash').classList.add('flash');$('#statusText').textContent='JUST CATCH!';state.statusT=.75;}}
 
 function draw(){ctx.clearRect(0,0,W,H);drawCourt();drawBallTrail();for(const team of [1,0])for(let i=0;i<2;i++)drawPlayer(state.players[team][i],state.active[team]===i);drawBall();drawCharge();}
 function drawCourt(){
@@ -210,7 +246,7 @@ function drawBallTrail(){const b=state.ball;for(let i=0;i<b.trail.length;i++){co
 function drawBall(){const b=state.ball;if(b.special==='stealth'&&!b.visible){ctx.save();ctx.globalAlpha=.55;ctx.fillStyle='#07131f';ctx.beginPath();ctx.ellipse(b.x,b.y+10,18,7,0,0,Math.PI*2);ctx.fill();ctx.restore();return;}ctx.save();ctx.translate(b.x,b.y-b.z*.28);ctx.shadowBlur=b.type==='special'?26:10;ctx.shadowColor=b.type==='special'?'#fff06a':'#9ff';ctx.fillStyle='#f7fbff';ctx.beginPath();ctx.arc(0,0,b.r,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#12202b';ctx.lineWidth=3;ctx.stroke();ctx.fillStyle='#12202b';ctx.beginPath();ctx.arc(0,0,5,0,Math.PI*2);ctx.fill();ctx.restore();if(b.z>0){ctx.fillStyle='#0006';ctx.beginPath();ctx.ellipse(b.x,b.y+9,16,6,0,0,Math.PI*2);ctx.fill();}}
 function drawCharge(){for(let team=0;team<2;team++)for(const p of state.players[team])if(p.charging){ctx.fillStyle='#000b';ctx.fillRect(p.x-35,p.y-48,70,8);ctx.fillStyle='#ffe462';ctx.fillRect(p.x-35,p.y-48,70*p.charge,8);}}
 
-function updateHUD(){if(!state)return;$('#score1').textContent=state.score[0];$('#score2').textContent=state.score[1];const s=Math.ceil(state.time),m=Math.floor(s/60),ss=s%60;$('#timer').textContent=`${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;$('#gauge1').style.width=state.gauge[0]+'%';$('#gauge2').style.width=state.gauge[1]+'%';}
+function updateHUD(){if(!state)return;$('#score1').textContent=state.score[0];$('#score2').textContent=state.score[1];const s=Math.ceil(state.time),m=Math.floor(s/60),ss=s%60;$('#timer').textContent=`${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;$('#gauge1').style.width=state.gauge[0]+'%';$('#gauge2').style.width=state.gauge[1]+'%';if(state.statusT<=0&&state.attackTeam>=0)$('#statusText').textContent=`攻撃 ${Math.max(0,state.advanceTime).toFixed(1)}秒`;}
 function loop(now){if(!state||!state.running)return;const dt=Math.min(.033,(now-last)/1000);last=now;update(dt);draw();raf=requestAnimationFrame(loop);}
 function finish(){state.running=false;cancelAnimationFrame(raf);gameScreen.classList.add('hidden');result.classList.remove('hidden');const [a,b]=state.score;$('#resultTitle').textContent=a>b?'YOU WIN!':a<b?'YOU LOSE':'DRAW';$('#resultScore').textContent=`${state.teams[0].name} ${a} - ${b} ${state.teams[1].name}`;}
 
