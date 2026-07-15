@@ -49,7 +49,7 @@ function newGame(){
   state={
     mode:$('#modeSelect').value,difficulty:$('#difficultySelect').value,total:+$('#timeSelect').value,time:+$('#timeSelect').value,
     running:true,score:[0,0],gauge:[0,0],teams:[t1,t2],special:[$('#specialSelect').value,['hook','curve','break','stealth'][Math.floor(Math.random()*4)]],
-    active:[1,1],players:[[],[]],ball:new Ball(),freeze:0,statusT:1.2,goalPause:0,keyboard2:false,attackTeam:-1,advanceTime:6
+    active:[1,1],players:[[],[]],ball:new Ball(),freeze:0,statusT:1.2,goalPause:0,keyboard2:false,attackTeam:-1,advanceTime:6,pendingShot:[null,null]
   };
   state.players[0]=[new Player(0,'GK',CX,H-118),new Player(0,'FP',CX,H-285)];
   state.players[1]=[new Player(1,'GK',CX,118),new Player(1,'FP',CX,285)];
@@ -108,10 +108,28 @@ function pressAction(team,a){
   if(!state||!state.running)return;
   const own=state.ball.owner && state.ball.owner.team===team;
   if(own){
-    if((a==='C'||a==='D') && actionHeld(team,a==='C'?'D':'C') && state.gauge[team]>=100){fireSpecial(team);return;}
-    if(a==='A'||a==='B')pass(team,a==='B');
-    else if(a==='C'||a==='D'){const p=state.ball.owner;p.charging=a;p.charge=0;}
+    // 必殺ゲージ満タン時、C+D同時押しで選択中の必殺シュート。
+    if((a==='C'||a==='D') && actionHeld(team,a==='C'?'D':'C') && state.gauge[team]>=100){
+      state.pendingShot[team]=null;
+      const owner=state.ball.owner;if(owner){owner.charging='';owner.charge=0;}
+      fireSpecial(team);return;
+    }
+    if(a==='A'||a==='B'){
+      state.pendingShot[team]=null;
+      pass(team,a==='B');
+    }else if(a==='C'||a==='D'){
+      const pending=state.pendingShot[team];
+      if(pending&&pending.button===a&&pending.time<=.28){
+        state.pendingShot[team]=null;
+        const p=state.ball.owner;
+        if(p){p.charging='';p.charge=0;shoot(team,a,.5);}
+        $('#statusText').textContent='HALF CHARGE!';state.statusT=.45;
+        return;
+      }
+      const p=state.ball.owner;p.charging=a;p.charge=0;p.chargeHeld=0;
+    }
   }else{
+    state.pendingShot[team]=null;
     if(a==='A')state.active[team]=1-state.active[team];
     else if(a==='B'){const p=state.players[team][state.active[team]];p.action='return';p.actionT=.22;}
     else if(a==='C'||a==='D')keeperDive(team,a==='C');
@@ -119,7 +137,16 @@ function pressAction(team,a){
 }
 function releaseAction(team,a){
   if(!state)return;const p=state.ball.owner;
-  if(p&&p.team===team&&p.charging===a){shoot(team,a,p.charge);p.charging='';p.charge=0;}
+  if(p&&p.team===team&&p.charging===a){
+    const held=p.chargeHeld||0;
+    if(held<.2&&p.charge<.36){
+      // 短いタップは少し待ち、同じボタンの2回目が来ればハーフチャージにする。
+      state.pendingShot[team]={button:a,time:0,charge:p.charge};
+    }else{
+      shoot(team,a,p.charge);
+    }
+    p.charging='';p.charge=0;p.chargeHeld=0;
+  }
 }
 
 function pass(team,lob){
@@ -143,6 +170,7 @@ function keeperDive(team,longDive){
 }
 
 function update(dt){
+  for(let team=0;team<2;team++){const q=state.pendingShot[team];if(q){q.time+=dt;if(q.time>.28){const p=state.ball.owner;if(p&&p.team===team)shoot(team,q.button,q.charge);state.pendingShot[team]=null;}}}
   if(state.freeze>0){state.freeze-=dt;return;}
   if(state.goalPause>0){state.goalPause-=dt;return;}
   state.time-=dt;if(state.time<=0){state.time=0;finish();return;}
@@ -163,7 +191,7 @@ function updateTeam(team,dt,human){
   let v=inputVector(team);if(!((team===0&&(keys.KeyW||keys.KeyS||keys.KeyA||keys.KeyD||Object.values(touchDir).some(Boolean)))||(team===1&&(keys.ArrowUp||keys.ArrowDown||keys.ArrowLeft||keys.ArrowRight))))v={x:0,y:0};
   const speed=p.charging?120:290;p.x+=v.x*speed*dt;p.y+=v.y*speed*dt;constrainPlayer(p);
   if(p.dive>0){p.x+=p.diveVX*dt;p.y+=p.diveVY*dt;p.dive-=dt;constrainPlayer(p);}
-  if(p.charging)p.charge=clamp(p.charge+dt/.9,0,1);
+  if(p.charging){p.charge=clamp(p.charge+dt/.65,0,1);p.chargeHeld=(p.chargeHeld||0)+dt;}
 }
 function updateCPU(dt){
   const diff={easy:.55,normal:.78,hard:1}[state.difficulty];const team=1,b=state.ball,ps=state.players[1],g=ps[0],f=ps[1];
@@ -255,7 +283,10 @@ function bindHoldButton(el,onPress,onRelease){
   const up=e=>{e.preventDefault();el.classList.remove('pressed');onRelease();};
   el.addEventListener('pointerdown',down);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);el.addEventListener('pointerleave',e=>{if(e.buttons)up(e)});
 }
-document.querySelectorAll('[data-dir]').forEach(el=>{const d=el.dataset.dir;bindHoldButton(el,()=>touchDir[d]=true,()=>touchDir[d]=false);});
+document.querySelectorAll('[data-dir]').forEach(el=>{
+  const parts=el.dataset.dir.split('-');
+  bindHoldButton(el,()=>{for(const d of parts)touchDir[d]=true;},()=>{for(const d of parts)touchDir[d]=false;});
+});
 document.querySelectorAll('[data-act]').forEach(el=>{const a=el.dataset.act;bindHoldButton(el,()=>{touchAct[a]=true;pressAction(0,a);},()=>{touchAct[a]=false;releaseAction(0,a);});});
 window.addEventListener('keydown',e=>{if(keys[e.code])return;keys[e.code]=true;const m1={KeyJ:'A',KeyK:'B',KeyL:'C',Semicolon:'D'},m2={Digit1:'A',Digit2:'B',Digit3:'C',Digit0:'D'};if(m1[e.code])pressAction(0,m1[e.code]);if(m2[e.code]&&state?.mode==='2p')pressAction(1,m2[e.code]);if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();});
 window.addEventListener('keyup',e=>{keys[e.code]=false;const m1={KeyJ:'A',KeyK:'B',KeyL:'C',Semicolon:'D'},m2={Digit1:'A',Digit2:'B',Digit3:'C',Digit0:'D'};if(m1[e.code])releaseAction(0,m1[e.code]);if(m2[e.code])releaseAction(1,m2[e.code]);});
