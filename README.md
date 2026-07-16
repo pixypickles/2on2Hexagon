@@ -1,2 +1,1 @@
-# Hex Arena Prototype
-Starter files.
+Ver0.2 prototype: player, CPU chase, dash, basic shot.
