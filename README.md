@@ -1,1 +1,1 @@
-Ver0.2 prototype: player, CPU chase, dash, basic shot.
+Ver0.3: bumpers, simple goal, keepers placeholders.
