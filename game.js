@@ -1,192 +1,326 @@
 
-const c=document.getElementById("game"),g=c.getContext("2d");
-const W=c.width,H=c.height,CX=W/2,CY=H/2;
-const court={top:55,bottom:H-55,left:110,right:W-110,cut:185},goalW=180;
-const keys={up:false,down:false,left:false,right:false,dash:false,shoot:false};
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+const W=canvas.width,H=canvas.height,CX=W/2,CY=H/2;
+const court={top:52,bottom:H-52,left:100,right:W-100,cut:195};
+const goalW=190;
+const input={up:false,down:false,left:false,right:false,dash:false};
 const score=[0,0];
-const player={x:CX,y:H-125,r:16,team:0};
-const cpu={x:CX,y:125,r:16,team:1,think:0};
-const keepers=[{x:CX,y:H-78,r:18,team:0,hold:0},{x:CX,y:78,r:18,team:1,hold:0}];
-const ball={x:CX,y:CY,vx:0,vy:0,r:9,owner:null,laser:false,cool:0};
-const bumpers=[{x:CX,y:175,r:23},{x:CX,y:H-175,r:23}];
+
+const player={x:CX,y:H-120,r:24,team:0};
+const cpu={x:CX,y:120,r:24,team:1,cool:0};
+const keepers=[
+  {x:CX,y:H-80,r:26,team:0,hold:0},
+  {x:CX,y:80,r:26,team:1,hold:0}
+];
+const ball={x:CX,y:CY,vx:0,vy:0,r:14,owner:null,laser:false,cool:0};
+
+const bumpers=[
+  {x:250,y:150,r:24,a:0},{x:480,y:145,r:24,a:1},{x:710,y:150,r:24,a:2},
+  {x:180,y:245,r:24,a:3},{x:780,y:245,r:24,a:4},
+  {x:250,y:390,r:24,a:5},{x:480,y:395,r:24,a:6},{x:710,y:390,r:24,a:7},
+  {x:165,y:315,r:24,a:8},{x:795,y:315,r:24,a:9}
+];
+
 let charging=false,charge=0,last=performance.now();
 
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 
 function boundsAtY(y){
-  const mid=CY;
-  if(y<=mid){
-    const t=clamp((y-court.top)/(mid-court.top),0,1);
+  if(y<=CY){
+    const t=clamp((y-court.top)/(CY-court.top),0,1);
     return {min:court.left+court.cut*(1-t),max:court.right-court.cut*(1-t)};
   }
-  const t=clamp((court.bottom-y)/(court.bottom-mid),0,1);
+  const t=clamp((court.bottom-y)/(court.bottom-CY),0,1);
   return {min:court.left+court.cut*(1-t),max:court.right-court.cut*(1-t)};
 }
+
 function constrain(o,minY,maxY){
   o.y=clamp(o.y,minY,maxY);
   const b=boundsAtY(o.y);
   o.x=clamp(o.x,b.min+o.r,b.max-o.r);
 }
-function resetBall(team=-1){
-  ball.owner=null;ball.laser=false;ball.vx=ball.vy=0;ball.cool=.35;
-  ball.x=CX;ball.y=CY;
-  player.x=CX;player.y=H-125;cpu.x=CX;cpu.y=125;
-  if(team===0)attach(player);
-  if(team===1)attach(cpu);
-}
+
 function attach(o){
-  ball.owner=o;ball.vx=ball.vy=0;ball.laser=false;ball.cool=.18;
+  ball.owner=o;
+  ball.vx=ball.vy=0;
+  ball.laser=false;
+  ball.cool=.18;
 }
+
 function kick(o,dx,dy,power,laser=false){
   const d=Math.hypot(dx,dy)||1;
   ball.owner=null;
   ball.x=o.x+dx/d*(o.r+ball.r+4);
   ball.y=o.y+dy/d*(o.r+ball.r+4);
-  ball.vx=dx/d*power;ball.vy=dy/d*power;
-  ball.laser=laser;ball.cool=.14;
+  ball.vx=dx/d*power;
+  ball.vy=dy/d*power;
+  ball.laser=laser;
+  ball.cool=.15;
 }
-function releaseShot(){
-  if(ball.owner!==player)return;
-  const laser=charge>=1.15;
-  const power=laser?18:charge>=.5?12:8;
-  kick(player,0,-1,power,laser);
+
+function resetBall(team=0){
+  player.x=CX;player.y=H-120;
+  cpu.x=CX;cpu.y=120;
+  ball.x=CX;ball.y=CY;ball.vx=ball.vy=0;ball.owner=null;ball.laser=false;ball.cool=.3;
+  attach(team===0?player:cpu);
 }
-function startShoot(){if(!charging){charging=true;charge=0}}
-function stopShoot(){if(charging){releaseShot();charging=false;charge=0}}
+
+function startShoot(){
+  if(!charging){charging=true;charge=0;}
+}
+
+function stopShoot(){
+  if(!charging)return;
+  if(ball.owner===player){
+    const laser=charge>=1.1;
+    const power=laser?19:charge>=.45?12:8;
+    kick(player,0,-1,power,laser);
+  }
+  charging=false;
+  charge=0;
+}
 
 addEventListener("keydown",e=>{
-  const q=e.key.toLowerCase();
-  if(q==="w")keys.up=true;if(q==="s")keys.down=true;if(q==="a")keys.left=true;if(q==="d")keys.right=true;
-  if(q==="k")keys.dash=true;if(q==="l")startShoot();
+  const k=e.key.toLowerCase();
+  if(k==="w")input.up=true;
+  if(k==="s")input.down=true;
+  if(k==="a")input.left=true;
+  if(k==="d")input.right=true;
+  if(k==="k")input.dash=true;
+  if(k==="l")startShoot();
 });
 addEventListener("keyup",e=>{
-  const q=e.key.toLowerCase();
-  if(q==="w")keys.up=false;if(q==="s")keys.down=false;if(q==="a")keys.left=false;if(q==="d")keys.right=false;
-  if(q==="k")keys.dash=false;if(q==="l")stopShoot();
+  const k=e.key.toLowerCase();
+  if(k==="w")input.up=false;
+  if(k==="s")input.down=false;
+  if(k==="a")input.left=false;
+  if(k==="d")input.right=false;
+  if(k==="k")input.dash=false;
+  if(k==="l")stopShoot();
 });
 
 function bindHold(el,on,off){
-  const down=e=>{e.preventDefault();el.classList.add("active");on()};
-  const up=e=>{e.preventDefault();el.classList.remove("active");off()};
+  const down=e=>{e.preventDefault();el.classList.add("active");on();};
+  const up=e=>{e.preventDefault();el.classList.remove("active");off();};
   el.addEventListener("pointerdown",down);
   el.addEventListener("pointerup",up);
   el.addEventListener("pointercancel",up);
   el.addEventListener("pointerleave",e=>{if(e.buttons)up(e)});
 }
-document.querySelectorAll("[data-dir]").forEach(b=>{
-  const d=b.dataset.dir;bindHold(b,()=>keys[d]=true,()=>keys[d]=false);
+
+document.querySelectorAll("[data-dir]").forEach(btn=>{
+  const dirs=btn.dataset.dir.split(",");
+  bindHold(
+    btn,
+    ()=>dirs.forEach(d=>input[d]=true),
+    ()=>dirs.forEach(d=>input[d]=false)
+  );
 });
-bindHold(document.getElementById("dash"),()=>keys.dash=true,()=>keys.dash=false);
+bindHold(document.getElementById("dash"),()=>input.dash=true,()=>input.dash=false);
 bindHold(document.getElementById("shoot"),startShoot,stopShoot);
 
 function updatePlayer(dt){
-  let dx=(keys.right?1:0)-(keys.left?1:0),dy=(keys.down?1:0)-(keys.up?1:0);
+  let dx=(input.right?1:0)-(input.left?1:0);
+  let dy=(input.down?1:0)-(input.up?1:0);
   const d=Math.hypot(dx,dy)||1;
-  const speed=(keys.dash?300:175)*(charging?.55:1);
-  player.x+=dx/d*speed*dt;player.y+=dy/d*speed*dt;
-  constrain(player,CY+15,court.bottom-18);
-  if(charging)charge=Math.min(1.3,charge+dt);
+  const speed=(input.dash?320:185)*(charging?.58:1);
+  player.x+=dx/d*speed*dt;
+  player.y+=dy/d*speed*dt;
+  constrain(player,CY+10,court.bottom-20);
+  if(charging)charge=Math.min(1.25,charge+dt);
 }
+
 function updateCPU(dt){
-  cpu.think-=dt;
-  let tx=ball.x,ty=ball.y;
-  if(ball.owner===cpu){tx=CX;ty=court.bottom-35}
-  const dx=tx-cpu.x,dy=ty-cpu.y,d=Math.hypot(dx,dy)||1;
-  cpu.x+=dx/d*135*dt;cpu.y+=dy/d*135*dt;
-  constrain(cpu,court.top+18,CY-15);
-  if(ball.owner===cpu&&cpu.think<=0){
-    kick(cpu,(CX-cpu.x)*.45,1,9+Math.random()*2,Math.random()<.08);
-    cpu.think=.8;
+  cpu.cool-=dt;
+  const target=ball.owner===cpu?{x:CX,y:court.bottom-35}:ball;
+  const dx=target.x-cpu.x,dy=target.y-cpu.y,d=Math.hypot(dx,dy)||1;
+  cpu.x+=dx/d*145*dt;
+  cpu.y+=dy/d*145*dt;
+  constrain(cpu,court.top+20,CY-10);
+
+  if(ball.owner===cpu&&cpu.cool<=0){
+    kick(cpu,(CX-cpu.x)*.4,1,9+Math.random()*2,Math.random()<.08);
+    cpu.cool=.9;
   }
 }
+
 function updateKeepers(dt){
   keepers.forEach((k,i)=>{
     k.hold-=dt;
-    const target=clamp(ball.x,CX-goalW/2+20,CX+goalW/2-20);
-    k.x+=clamp(target-k.x,-170*dt,170*dt);
+    const tx=clamp(ball.x,CX-goalW/2+25,CX+goalW/2-25);
+    k.x+=clamp(tx-k.x,-180*dt,180*dt);
+
     if(ball.owner===k&&k.hold<=0){
       const mate=i===0?player:cpu;
       kick(k,mate.x-k.x,mate.y-k.y,7,false);
     }
   });
 }
-function collisions(){
+
+function collideActors(){
   if(ball.cool>0)return;
   for(const o of [player,cpu,...keepers]){
-    if(distance(ball,o)>ball.r+o.r+4)continue;
+    if(dist(ball,o)>ball.r+o.r+4)continue;
+
     if(ball.laser){
       ball.laser=false;
       const dx=ball.x-o.x,dy=ball.y-o.y,d=Math.hypot(dx,dy)||1;
-      ball.vx=dx/d*9;ball.vy=dy/d*9;ball.cool=.12;
+      ball.vx=dx/d*10;
+      ball.vy=dy/d*10;
+      ball.cool=.12;
     }else if(keepers.includes(o)){
-      attach(o);o.hold=.5;
-    }else if(Math.hypot(ball.vx,ball.vy)<7.5){
+      attach(o);
+      o.hold=.48;
+    }else if(Math.hypot(ball.vx,ball.vy)<8.5){
       attach(o);
     }else{
       const dx=ball.x-o.x,dy=ball.y-o.y,d=Math.hypot(dx,dy)||1;
-      ball.vx=dx/d*5.5;ball.vy=dy/d*5.5;ball.cool=.1;
+      ball.vx=dx/d*6;
+      ball.vy=dy/d*6;
+      ball.cool=.1;
     }
     break;
   }
 }
-function updateBall(){
-  if(ball.cool>0)ball.cool-=1/60;
+
+function updateBall(dt){
+  if(ball.cool>0)ball.cool-=dt;
+
   if(ball.owner){
-    const o=ball.owner,dir=o.team===0?-1:1;
-    ball.x=o.x;ball.y=o.y+dir*(o.r+ball.r+3);
+    const o=ball.owner;
+    const dir=o.team===0?-1:1;
+    ball.x=o.x;
+    ball.y=o.y+dir*(o.r+ball.r+4);
     return;
   }
-  ball.x+=ball.vx;ball.y+=ball.vy;
-  if(!ball.laser){ball.vx*=.991;ball.vy*=.991}
+
+  ball.x+=ball.vx;
+  ball.y+=ball.vy;
+
+  if(!ball.laser){
+    ball.vx*=.992;
+    ball.vy*=.992;
+  }
+
   for(const b of bumpers){
-    let dx=ball.x-b.x,dy=ball.y-b.y,d=Math.hypot(dx,dy)||1;
+    b.a+=dt*12;
+    const dx=ball.x-b.x,dy=ball.y-b.y,d=Math.hypot(dx,dy)||1;
     if(d<b.r+ball.r){
-      const sp=Math.max(ball.laser?15:7.5,Math.hypot(ball.vx,ball.vy));
-      ball.x=b.x+dx/d*(b.r+ball.r+1);ball.y=b.y+dy/d*(b.r+ball.r+1);
-      ball.vx=dx/d*sp;ball.vy=dy/d*sp;ball.cool=.08;
+      const speed=Math.max(ball.laser?17:9,Math.hypot(ball.vx,ball.vy)*1.22);
+      const tangentX=-dy/d,tangentY=dx/d;
+      ball.x=b.x+dx/d*(b.r+ball.r+1);
+      ball.y=b.y+dy/d*(b.r+ball.r+1);
+      ball.vx=dx/d*speed+tangentX*3.2;
+      ball.vy=dy/d*speed+tangentY*3.2;
+      ball.cool=.08;
     }
   }
+
   const b=boundsAtY(ball.y);
-  if(ball.x-ball.r<b.min){ball.x=b.min+ball.r;ball.vx=Math.abs(ball.vx)}
-  if(ball.x+ball.r>b.max){ball.x=b.max-ball.r;ball.vx=-Math.abs(ball.vx)}
+  if(ball.x-ball.r<b.min){ball.x=b.min+ball.r;ball.vx=Math.abs(ball.vx);}
+  if(ball.x+ball.r>b.max){ball.x=b.max-ball.r;ball.vx=-Math.abs(ball.vx);}
+
   if(ball.y-ball.r<court.top){
-    if(Math.abs(ball.x-CX)<goalW/2){score[0]++;resetBall(1);return}
+    if(Math.abs(ball.x-CX)<goalW/2){score[0]++;resetBall(1);return;}
     ball.y=court.top+ball.r;ball.vy=Math.abs(ball.vy);
   }
   if(ball.y+ball.r>court.bottom){
-    if(Math.abs(ball.x-CX)<goalW/2){score[1]++;resetBall(0);return}
+    if(Math.abs(ball.x-CX)<goalW/2){score[1]++;resetBall(0);return;}
     ball.y=court.bottom-ball.r;ball.vy=-Math.abs(ball.vy);
   }
-  collisions();
+
+  collideActors();
 }
+
 function drawCourt(){
-  g.beginPath();
-  g.moveTo(court.left+court.cut,court.top);g.lineTo(court.right-court.cut,court.top);
-  g.lineTo(court.right,CY);g.lineTo(court.right-court.cut,court.bottom);
-  g.lineTo(court.left+court.cut,court.bottom);g.lineTo(court.left,CY);g.closePath();
-  g.fillStyle="#1b5b49";g.fill();g.strokeStyle="#dff";g.lineWidth=4;g.stroke();
-  g.beginPath();g.moveTo(court.left,CY);g.lineTo(court.right,CY);g.stroke();
-  g.strokeRect(CX-goalW/2,court.top-30,goalW,30);
-  g.strokeRect(CX-goalW/2,court.bottom,goalW,30);
+  ctx.beginPath();
+  ctx.moveTo(court.left+court.cut,court.top);
+  ctx.lineTo(court.right-court.cut,court.top);
+  ctx.lineTo(court.right,CY);
+  ctx.lineTo(court.right-court.cut,court.bottom);
+  ctx.lineTo(court.left+court.cut,court.bottom);
+  ctx.lineTo(court.left,CY);
+  ctx.closePath();
+
+  ctx.fillStyle="#1b5b49";
+  ctx.fill();
+  ctx.strokeStyle="#dff";
+  ctx.lineWidth=4;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(court.left,CY);
+  ctx.lineTo(court.right,CY);
+  ctx.stroke();
+
+  ctx.strokeRect(CX-goalW/2,court.top-30,goalW,30);
+  ctx.strokeRect(CX-goalW/2,court.bottom,goalW,30);
 }
+
 function circle(o,color){
-  g.fillStyle=color;g.beginPath();g.arc(o.x,o.y,o.r,0,Math.PI*2);g.fill();
+  ctx.fillStyle=color;
+  ctx.beginPath();
+  ctx.arc(o.x,o.y,o.r,0,Math.PI*2);
+  ctx.fill();
 }
+
+function drawBumper(b){
+  ctx.save();
+  ctx.translate(b.x,b.y);
+  ctx.rotate(b.a);
+  ctx.fillStyle="#b9b9b9";
+  ctx.beginPath();
+  ctx.arc(0,0,b.r,0,Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle="#6f6f6f";
+  ctx.lineWidth=5;
+  ctx.stroke();
+
+  ctx.strokeStyle="#ff4fbf";
+  ctx.lineWidth=5;
+  for(let i=0;i<4;i++){
+    ctx.rotate(Math.PI/2);
+    ctx.beginPath();
+    ctx.moveTo(5,0);
+    ctx.lineTo(b.r-5,0);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function draw(){
-  g.clearRect(0,0,W,H);drawCourt();
-  bumpers.forEach(b=>{circle(b,"#bbb");g.strokeStyle="#666";g.lineWidth=4;g.stroke()});
-  circle(keepers[0],"#69aaff");circle(keepers[1],"#ff7777");
-  circle(player,"#008cff");circle(cpu,"#ed174c");
-  g.shadowBlur=ball.laser?28:0;g.shadowColor="#8fffff";
-  circle(ball,ball.laser?"#9fffff":"gold");g.shadowBlur=0;
+  ctx.clearRect(0,0,W,H);
+  drawCourt();
+
+  bumpers.forEach(drawBumper);
+
+  circle(keepers[0],"#67aaff");
+  circle(keepers[1],"#ff7777");
+  circle(player,"#008cff");
+  circle(cpu,"#ed174c");
+
+  ctx.shadowBlur=ball.laser?30:0;
+  ctx.shadowColor="#8fffff";
+  circle(ball,ball.laser?"#9fffff":"gold");
+  ctx.shadowBlur=0;
+
   document.getElementById("score").textContent=score[0]+" - "+score[1];
-  document.getElementById("status").textContent=charging?(charge>=1.15?"LASER":charge>=.5?"POWER":"CHARGE"):"WASD / 画面ボタン";
+  document.getElementById("status").textContent=
+    charging?(charge>=1.1?"LASER":charge>=.45?"POWER":"CHARGE"):"8方向 / DASH / SHOOT";
 }
+
 function loop(now){
-  const dt=Math.min(.033,(now-last)/1000);last=now;
-  updatePlayer(dt);updateCPU(dt);updateKeepers(dt);updateBall();draw();
+  const dt=Math.min(.033,(now-last)/1000);
+  last=now;
+  updatePlayer(dt);
+  updateCPU(dt);
+  updateKeepers(dt);
+  updateBall(dt);
+  draw();
   requestAnimationFrame(loop);
 }
+
 resetBall(0);
 requestAnimationFrame(loop);
