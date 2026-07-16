@@ -1,17 +1,11 @@
-# Hex Arena Ver0.4
+# Hex Arena Ver0.4.1 Fix
 
-Controls:
-- WASD: move
-- K: dash
-- Hold L and release: shoot
-  - short: normal
-  - 0.5s+: power
-  - 1.2s+: laser
+- WASD: 移動
+- K: ダッシュ
+- L長押し→離す: シュート
 
-Included:
-- Hex court
-- CPU field player
-- Auto keepers
-- Two bumpers
-- Goals and score
-- Charge shot and laser
+修正:
+- 操作不能
+- GK間の連続ピンポン
+- ボール保持
+- GKキャッチ後の自動パス
